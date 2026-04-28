@@ -82,6 +82,8 @@ def compare_chunks():
         'scores': [round(s, 4) for s in scores]
     })
 
-if __name__ == '__main__':
-    port = int(os.getenv('PORT', 5001))
-    app.run(host='0.0.0.0', port=port, debug=False)
+import os
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
