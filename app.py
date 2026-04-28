@@ -1,11 +1,11 @@
 """
-Neoveli Semantic Similarity Microservice (OPTIMIZED)
-Flask + sentence-transformers (LIGHTWEIGHT VERSION)
+Neoveli Semantic Similarity Microservice (PRO OPTIMIZED)
+Flask + sentence-transformers (LOW MEMORY + RENDER READY)
 
-Deploy on VPS or Render Free (optimized for 512MB RAM)
-
-Install:
-  pip install flask sentence-transformers==2.2.2 scikit-learn numpy
+Optimized for:
+- Render Free (512MB RAM)
+- Fast startup
+- Stable inference
 """
 
 from flask import Flask, request, jsonify
@@ -14,24 +14,32 @@ from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 import os
 
+# 🔥 IMPORTANT (prevents memory/thread issues)
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
 app = Flask(__name__)
 
-# 🟢 LIGHTWEIGHT MODEL (IMPORTANT FIX FOR MEMORY ERROR)
+# 🟢 LIGHTWEIGHT MODEL
 MODEL_NAME = os.getenv('MODEL_NAME', 'paraphrase-MiniLM-L3-v2')
 
 print(f"Loading lightweight model: {MODEL_NAME}...")
 
+# 🔥 LOAD MODEL (CPU ONLY + LOW MEMORY)
 model = SentenceTransformer(
     MODEL_NAME,
-    device='cpu'  # 🔥 force CPU (avoids GPU memory crash)
+    device='cpu'
 )
 
 print("Model loaded successfully.")
 
 def get_embedding(text: str):
     """Generate embedding safely (memory optimized)."""
-    text = text[:2000]  # 🔥 reduced for memory stability
-    return model.encode([text], convert_to_numpy=True)[0]
+    text = text[:1500]  # 🔥 aún más ligero
+    return model.encode(
+        [text],
+        convert_to_numpy=True,
+        normalize_embeddings=True  # 🔥 mejora precisión + estabilidad
+    )[0]
 
 @app.route('/health', methods=['GET'])
 def health():
@@ -48,10 +56,10 @@ def compare():
     if not data or 'text1' not in data or 'text2' not in data:
         return jsonify({'error': 'text1 and text2 required'}), 400
 
-    text1 = str(data['text1'])[:3000]
-    text2 = str(data['text2'])[:3000]
+    text1 = str(data['text1'])[:2000]
+    text2 = str(data['text2'])[:2000]
 
-    # 🔥 avoid useless computation
+    # 🔥 evitar gasto innecesario
     if len(text1.split()) < 5 or len(text2.split()) < 5:
         return jsonify({'similarity': 0.0})
 
@@ -59,13 +67,9 @@ def compare():
     emb2 = get_embedding(text2).reshape(1, -1)
 
     sim = float(cosine_similarity(emb1, emb2)[0][0])
-
-    # clamp
     sim = max(0.0, min(1.0, sim))
 
-    return jsonify({
-        'similarity': round(sim, 4)
-    })
+    return jsonify({'similarity': round(sim, 4)})
 
 @app.route('/compare_chunks', methods=['POST'])
 def compare_chunks():
@@ -74,14 +78,19 @@ def compare_chunks():
     if not data or 'text' not in data or 'corpus' not in data:
         return jsonify({'error': 'text and corpus required'}), 400
 
-    text = str(data['text'])[:3000]
-    corpus = [str(c)[:2000] for c in data['corpus'][:20]]  # 🔥 reduced for memory
+    text = str(data['text'])[:2000]
+    corpus = [str(c)[:1500] for c in data['corpus'][:15]]  # 🔥 menos carga
 
     if not corpus:
         return jsonify({'best_similarity': 0.0, 'scores': []})
 
     emb_text = get_embedding(text).reshape(1, -1)
-    emb_corpus = model.encode(corpus, convert_to_numpy=True)
+
+    emb_corpus = model.encode(
+        corpus,
+        convert_to_numpy=True,
+        normalize_embeddings=True  # 🔥 clave
+    )
 
     scores = cosine_similarity(emb_text, emb_corpus)[0].tolist()
     scores = [max(0.0, min(1.0, float(s))) for s in scores]
@@ -91,7 +100,7 @@ def compare_chunks():
         'scores': [round(s, 4) for s in scores]
     })
 
-# 🟢 IMPORTANT RENDER FIX
+# 🟢 RENDER ENTRYPOINT
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
