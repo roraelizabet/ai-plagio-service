@@ -1,54 +1,54 @@
 """
-Neoveli Semantic Similarity Microservice (PRO OPTIMIZED)
-Flask + sentence-transformers (LOW MEMORY + RENDER READY)
-
-Optimized for:
-- Render Free (512MB RAM)
-- Fast startup
-- Stable inference
+Neoveli Semantic Similarity Microservice (PRO OPTIMIZED - FIXED)
+Flask + sentence-transformers (RENDER SAFE)
 """
 
 from flask import Flask, request, jsonify
-from sentence_transformers import SentenceTransformer
-def cosine_similarity_np(a, b):
-    return float(np.dot(a, b.T))
 import numpy as np
 import os
 
-# 🔥 IMPORTANT (prevents memory/thread issues)
+# 🔥 IMPORTANT
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 app = Flask(__name__)
 
-# 🟢 LIGHTWEIGHT MODEL
 MODEL_NAME = os.getenv('MODEL_NAME', 'paraphrase-MiniLM-L3-v2')
 
-print(f"Loading lightweight model: {MODEL_NAME}...")
+# 🔥 LAZY LOAD (CLAVE)
+model = None
 
-# 🔥 LOAD MODEL (CPU ONLY + LOW MEMORY)
-model = SentenceTransformer(
-    MODEL_NAME,
-    device='cpu'
-)
+def get_model():
+    global model
+    if model is None:
+        print(f"Loading model: {MODEL_NAME}...")
+        from sentence_transformers import SentenceTransformer
+        model = SentenceTransformer(MODEL_NAME, device='cpu')
+        print("Model loaded.")
+    return model
 
-print("Model loaded successfully.")
+
+def cosine_similarity_np(a, b):
+    return float(np.dot(a, b.T))
+
 
 def get_embedding(text: str):
-    """Generate embedding safely (memory optimized)."""
-    text = text[:1500]  # 🔥 aún más ligero
+    text = text[:1500]
+    model = get_model()
     return model.encode(
         [text],
         convert_to_numpy=True,
-        normalize_embeddings=True  # 🔥 mejora precisión + estabilidad
+        normalize_embeddings=True
     )[0]
+
 
 @app.route('/health', methods=['GET'])
 def health():
     return jsonify({
         'status': 'ok',
         'model': MODEL_NAME,
-        'mode': 'cpu-lightweight'
+        'mode': 'lazy-load'
     })
+
 
 @app.route('/compare', methods=['POST'])
 def compare():
@@ -60,7 +60,6 @@ def compare():
     text1 = str(data['text1'])[:2000]
     text2 = str(data['text2'])[:2000]
 
-    # 🔥 evitar gasto innecesario
     if len(text1.split()) < 5 or len(text2.split()) < 5:
         return jsonify({'similarity': 0.0})
 
@@ -72,6 +71,7 @@ def compare():
 
     return jsonify({'similarity': round(sim, 4)})
 
+
 @app.route('/compare_chunks', methods=['POST'])
 def compare_chunks():
     data = request.get_json(force=True, silent=True)
@@ -80,17 +80,23 @@ def compare_chunks():
         return jsonify({'error': 'text and corpus required'}), 400
 
     text = str(data['text'])[:2000]
-    corpus = [str(c)[:1500] for c in data['corpus'][:15]]  # 🔥 menos carga
+    corpus = [str(c)[:1500] for c in data['corpus'][:15]]
 
     if not corpus:
         return jsonify({'best_similarity': 0.0, 'scores': []})
 
-    emb_text = get_embedding(text).reshape(1, -1)
+    model = get_model()
+
+    emb_text = model.encode(
+        [text],
+        convert_to_numpy=True,
+        normalize_embeddings=True
+    ).reshape(1, -1)
 
     emb_corpus = model.encode(
         corpus,
         convert_to_numpy=True,
-        normalize_embeddings=True  # 🔥 clave
+        normalize_embeddings=True
     )
 
     scores = np.dot(emb_text, emb_corpus.T)[0].tolist()
@@ -101,7 +107,8 @@ def compare_chunks():
         'scores': [round(s, 4) for s in scores]
     })
 
-# 🟢 RENDER ENTRYPOINT
+
+# 🔥 RENDER ENTRYPOINT
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
