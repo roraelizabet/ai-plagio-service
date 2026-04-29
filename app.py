@@ -1,20 +1,21 @@
 """
-Neoveli Semantic Similarity Microservice (PRO OPTIMIZED - FIXED)
-Flask + sentence-transformers (RENDER SAFE)
+Neoveli Semantic Similarity Microservice (ULTRA OPTIMIZED - RENDER SAFE)
 """
 
 from flask import Flask, request, jsonify
 import numpy as np
 import os
 
-# 🔥 IMPORTANT
+# 🔥 ULTRA IMPORTANT (reduce RAM)
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
 
 app = Flask(__name__)
 
 MODEL_NAME = os.getenv('MODEL_NAME', 'paraphrase-MiniLM-L3-v2')
 
-# 🔥 LAZY LOAD (CLAVE)
+# 🔥 LAZY LOAD
 model = None
 
 def get_model():
@@ -23,6 +24,10 @@ def get_model():
         print(f"Loading model: {MODEL_NAME}...")
         from sentence_transformers import SentenceTransformer
         model = SentenceTransformer(MODEL_NAME, device='cpu')
+
+        # 🔥 REDUCE USO DE MEMORIA
+        model.max_seq_length = 128
+
         print("Model loaded.")
     return model
 
@@ -32,12 +37,14 @@ def cosine_similarity_np(a, b):
 
 
 def get_embedding(text: str):
-    text = text[:1500]
+    text = text[:1000]  # 🔥 más corto = menos RAM
     model = get_model()
+
     return model.encode(
         [text],
         convert_to_numpy=True,
-        normalize_embeddings=True
+        normalize_embeddings=True,
+        batch_size=1  # 🔥 evita picos de memoria
     )[0]
 
 
@@ -46,7 +53,7 @@ def health():
     return jsonify({
         'status': 'ok',
         'model': MODEL_NAME,
-        'mode': 'lazy-load'
+        'mode': 'ultra-optimized'
     })
 
 
@@ -57,8 +64,8 @@ def compare():
     if not data or 'text1' not in data or 'text2' not in data:
         return jsonify({'error': 'text1 and text2 required'}), 400
 
-    text1 = str(data['text1'])[:2000]
-    text2 = str(data['text2'])[:2000]
+    text1 = str(data['text1'])[:1500]
+    text2 = str(data['text2'])[:1500]
 
     if len(text1.split()) < 5 or len(text2.split()) < 5:
         return jsonify({'similarity': 0.0})
@@ -79,8 +86,8 @@ def compare_chunks():
     if not data or 'text' not in data or 'corpus' not in data:
         return jsonify({'error': 'text and corpus required'}), 400
 
-    text = str(data['text'])[:2000]
-    corpus = [str(c)[:1500] for c in data['corpus'][:15]]
+    text = str(data['text'])[:1500]
+    corpus = [str(c)[:1000] for c in data['corpus'][:10]]  # 🔥 menos carga
 
     if not corpus:
         return jsonify({'best_similarity': 0.0, 'scores': []})
@@ -90,13 +97,15 @@ def compare_chunks():
     emb_text = model.encode(
         [text],
         convert_to_numpy=True,
-        normalize_embeddings=True
+        normalize_embeddings=True,
+        batch_size=1
     ).reshape(1, -1)
 
     emb_corpus = model.encode(
         corpus,
         convert_to_numpy=True,
-        normalize_embeddings=True
+        normalize_embeddings=True,
+        batch_size=1
     )
 
     scores = np.dot(emb_text, emb_corpus.T)[0].tolist()
