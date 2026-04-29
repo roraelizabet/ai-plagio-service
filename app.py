@@ -10,7 +10,8 @@ Optimized for:
 
 from flask import Flask, request, jsonify
 from sentence_transformers import SentenceTransformer
-from sklearn.metrics.pairwise import cosine_similarity
+def cosine_similarity_np(a, b):
+    return float(np.dot(a, b.T))
 import numpy as np
 import os
 
@@ -66,7 +67,7 @@ def compare():
     emb1 = get_embedding(text1).reshape(1, -1)
     emb2 = get_embedding(text2).reshape(1, -1)
 
-    sim = float(cosine_similarity(emb1, emb2)[0][0])
+    sim = cosine_similarity_np(emb1, emb2)
     sim = max(0.0, min(1.0, sim))
 
     return jsonify({'similarity': round(sim, 4)})
@@ -92,7 +93,7 @@ def compare_chunks():
         normalize_embeddings=True  # 🔥 clave
     )
 
-    scores = cosine_similarity(emb_text, emb_corpus)[0].tolist()
+    scores = np.dot(emb_text, emb_corpus.T)[0].tolist()
     scores = [max(0.0, min(1.0, float(s))) for s in scores]
 
     return jsonify({
